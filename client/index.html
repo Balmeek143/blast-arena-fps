@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BLAST ARENA — Multiplayer Browser FPS</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #090d16;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      color: #fff;
+    }
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    /* HUD Overlay */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: none;
+    }
+    /* Crosshair */
+    #crosshair-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .crosshair-dot {
+      width: 4px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      box-shadow: 0 0 4px rgba(0,0,0,0.8);
+    }
+    .crosshair-line {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.75);
+      box-shadow: 0 0 2px rgba(0,0,0,0.8);
+    }
+    .ch-top { width: 2px; height: 10px; top: -14px; left: 1px; }
+    .ch-bottom { width: 2px; height: 10px; bottom: -14px; left: 1px; }
+    .ch-left { height: 2px; width: 10px; left: -14px; top: 1px; }
+    .ch-right { height: 2px; width: 10px; right: -14px; top: 1px; }
+
+    /* Hitmarker */
+    #hitmarker {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 24px;
+      height: 24px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease-out;
+    }
+    #hitmarker.active {
+      opacity: 1;
+    }
+    .hm-line {
+      position: absolute;
+      width: 8px;
+      height: 2px;
+      background: #ffffff;
+      box-shadow: 0 0 4px rgba(255, 0, 0, 0.8);
+    }
+    .hm-line.headshot {
+      background: #f43f5e;
+      box-shadow: 0 0 8px #f43f5e;
+    }
+    .hm-1 { top: 3px; left: 3px; transform: rotate(45deg); }
+    .hm-2 { top: 3px; right: 3px; transform: rotate(-45deg); }
+    .hm-3 { bottom: 3px; left: 3px; transform: rotate(-45deg); }
+    .hm-4 { bottom: 3px; right: 3px; transform: rotate(45deg); }
+
+    /* Top Bar: Match Timer & Leader Preview */
+    #top-bar {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      padding: 8px 24px;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    #match-timer {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #38bdf8;
+    }
+    #match-leader {
+      font-size: 14px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    /* Killfeed */
+    #killfeed {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 320px;
+    }
+    .killfeed-row {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-left: 3px solid #38bdf8;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      animation: fadeIn 0.2s ease-out;
+    }
+    .killfeed-row.headshot {
+      border-left-color: #f43f5e;
+    }
+    .kf-killer { color: #38bdf8; }
+    .kf-victim { color: #f87171; }
+    .kf-weapon { color: #fbbf24; font-size: 11px; text-transform: uppercase; }
+
+    /* Bottom Left: Health & Shield */
+    #player-status {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 260px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .bar-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .bar-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+    }
+    .bar-outer {
+      width: 100%;
+      height: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .bar-inner-hp {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #ef4444, #22c55e);
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .bar-inner-shield {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #0284c7, #38bdf8);
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #buff-badges {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .buff-badge {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .badge-speed { background: #10b981; color: #fff; }
+    .badge-damage { background: #f59e0b; color: #fff; }
+
+    /* Bottom Right: Weapon & Ammo */
+    #weapon-status {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      padding: 16px 24px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #weapon-name {
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #38bdf8;
+    }
+    #ammo-counter {
+      font-size: 34px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      line-height: 1;
+    }
+    #ammo-type-hint {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    #reload-indicator {
+      font-size: 12px;
+      font-weight: 800;
+      color: #f59e0b;
+      display: none;
+      letter-spacing: 1px;
+    }
+
+    /* Scoreboard Overlay (Tab) */
+    #scoreboard-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      padding: 24px;
+      width: 90%;
+      max-width: 600px;
+      z-index: 100;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+      display: none;
+    }
+    .sb-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      text-align: center;
+      color: #38bdf8;
+      letter-spacing: 1px;
+    }
+    table.sb-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    table.sb-table th {
+      text-align: left;
+      padding: 8px 12px;
+      color: #94a3b8;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+    table.sb-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-weight: 600;
+    }
+    table.sb-table tr.me {
+      background: rgba(56, 189, 248, 0.15);
+      border-left: 3px solid #38bdf8;
+    }
+
+    /* Damage Vignette */
+    #damage-vignette {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      box-shadow: inset 0 0 80px rgba(239, 68, 68, 0);
+      transition: box-shadow 0.1s ease-out;
+      z-index: 5;
+    }
+
+    /* Main Menu Screen */
+    #menu-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.98) 100%);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .game-logo {
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #38bdf8, #818cf8, #f43f5e);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .game-subtitle {
+      font-size: 14px;
+      color: #94a3b8;
+      font-weight: 600;
+      margin-bottom: 32px;
+      letter-spacing: 1px;
+    }
+    .menu-box {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+    }
+    .input-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .menu-input {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      outline: none;
+      transition: border 0.2s;
+    }
+    .menu-input:focus {
+      border-color: #38bdf8;
+    }
+    .btn-play {
+      width: 100%;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-play:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(2, 132, 199, 0.6);
+    }
+    .btn-play:active {
+      transform: translateY(1px);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .controls-hint {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #64748b;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* Leaderboard Modal */
+    #leaderboard-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(12px);
+      z-index: 60;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .lb-card {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 650px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    }
+    .lb-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .lb-title {
+      font-size: 24px;
+      font-weight: 900;
+      color: #38bdf8;
+      letter-spacing: 1px;
+    }
+    .btn-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 28px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .btn-close:hover {
+      color: #fff;
+    }
+    .lb-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .lb-tab {
+      flex: 1;
+      padding: 10px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      color: #94a3b8;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: all 0.2s;
+    }
+    .lb-tab.active {
+      background: #0284c7;
+      color: #fff;
+      border-color: #38bdf8;
+    }
+    .lb-list-container {
+      overflow-y: auto;
+      flex: 1;
+      border-radius: 8px;
+    }
+
+    /* Mobile Controls Overlay */
+    #mobile-controls {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      pointer-events: none;
+      display: none;
+    }
+    .touch-interactive {
+      pointer-events: auto;
+    }
+    #joystick-zone {
+      position: absolute;
+      bottom: 40px;
+      left: 40px;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+    #joystick-knob {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 54px;
+      height: 54px;
+      transform: translate(-50%, -50%);
+      background: rgba(56, 189, 248, 0.7);
+      border-radius: 50%;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+    }
+    #touch-look-zone {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 55%;
+      height: 100%;
+    }
+    .mobile-btn {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .mobile-btn:active {
+      transform: scale(0.92);
+      background: rgba(56, 189, 248, 0.8);
+    }
+    #m-shoot-btn {
+      bottom: 50px;
+      right: 50px;
+      width: 76px;
+      height: 76px;
+      background: rgba(239, 68, 68, 0.8);
+      border-color: #f87171;
+    }
+    #m-jump-btn {
+      bottom: 140px;
+      right: 60px;
+    }
+    #m-reload-btn {
+      bottom: 60px;
+      right: 140px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <div id="damage-vignette"></div>
+
+  <!-- HUD Overlay -->
+  <div id="hud">
+    <div id="crosshair-container">
+      <div class="crosshair-dot"></div>
+      <div class="crosshair-line ch-top"></div>
+      <div class="crosshair-line ch-bottom"></div>
+      <div class="crosshair-line ch-left"></div>
+      <div class="crosshair-line ch-right"></div>
+    </div>
+
+    <div id="hitmarker">
+      <div class="hm-line hm-1"></div>
+      <div class="hm-line hm-2"></div>
+      <div class="hm-line hm-3"></div>
+      <div class="hm-line hm-4"></div>
+    </div>
+
+    <div id="top-bar">
+      <div id="match-timer">03:00</div>
+      <div id="match-leader">1st: — (0 kills)</div>
+    </div>
+
+    <div id="killfeed"></div>
+
+    <div id="player-status">
+      <div class="bar-row">
+        <div class="bar-label">
+          <span>Health</span>
+          <span id="hp-text">100 / 100</span>
+        </div>
+        <div class="bar-outer">
+          <div id="hp-bar" class="bar-inner-hp"></div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">
+          <span>Shield</span>
+          <span id="shield-text">0 / 100</span>
+        </div>
+        <div class="bar-outer">
+          <div id="shield-bar" class="bar-inner-shield"></div>
+        </div>
+      </div>
+      <div id="buff-badges"></div>
+    </div>
+
+    <div id="weapon-status">
+      <div id="weapon-name">Tactical Pistol</div>
+      <div id="ammo-counter"><span id="ammo-current">12</span> / <span id="ammo-reserve">∞</span></div>
+      <div id="ammo-type-hint">Default Weapon</div>
+      <div id="reload-indicator">RELOADING...</div>
+    </div>
+  </div>
+
+  <!-- Scoreboard (Tab key) -->
+  <div id="scoreboard-modal">
+    <div class="sb-title">MATCH SCOREBOARD</div>
+    <table class="sb-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Player</th>
+          <th>Kills</th>
+          <th>Deaths</th>
+          <th>Score</th>
+        </tr>
+      </thead>
+      <tbody id="sb-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="menu-screen">
+    <h1 class="game-logo">BLAST ARENA</h1>
+    <p class="game-subtitle">Cross-Platform FPS • Mystery Power-ups • Global Leaderboard</p>
+
+    <div class="menu-box">
+      <div>
+        <label class="input-label" for="player-name-input">Callsign / Nickname</label>
+        <input type="text" id="player-name-input" class="menu-input" maxlength="16" placeholder="Enter nickname...">
+      </div>
+
+      <button id="btn-play" class="btn-play">PLAY NOW</button>
+      <button id="btn-open-leaderboard" class="btn-secondary">🏆 Global Leaderboard</button>
+
+      <div class="controls-hint">
+        <strong>Controls (Desktop):</strong> WASD to Move • Mouse to Look & Shoot • Space to Jump • R to Reload • Tab for Scoreboard<br>
+        <strong>Power-ups:</strong> Grab floating crates for Shotgun, Sniper, Rocket Launcher, Shields & Double Damage!
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard Modal -->
+  <div id="leaderboard-modal">
+    <div class="lb-card">
+      <div class="lb-header">
+        <div class="lb-title">GLOBAL LEADERBOARD</div>
+        <button id="btn-close-leaderboard" class="btn-close">&times;</button>
+      </div>
+      <div class="lb-tabs">
+        <button class="lb-tab active" data-timeframe="daily">Daily</button>
+        <button class="lb-tab" data-timeframe="weekly">Weekly</button>
+        <button class="lb-tab" data-timeframe="monthly">Monthly</button>
+      </div>
+      <div class="lb-list-container">
+        <table class="sb-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Player</th>
+              <th>Kills</th>
+              <th>Deaths</th>
+              <th>K/D</th>
+              <th>Wins</th>
+            </tr>
+          </thead>
+          <tbody id="lb-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Controls Overlay -->
+  <div id="mobile-controls">
+    <div id="joystick-zone" class="touch-interactive">
+      <div id="joystick-knob"></div>
+    </div>
+    <div id="touch-look-zone" class="touch-interactive"></div>
+    <button id="m-shoot-btn" class="mobile-btn touch-interactive">FIRE</button>
+    <button id="m-jump-btn" class="mobile-btn touch-interactive">JUMP</button>
+    <button id="m-reload-btn" class="mobile-btn touch-interactive">RELOAD</button>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
