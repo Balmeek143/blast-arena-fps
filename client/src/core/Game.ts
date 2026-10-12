@@ -129,17 +129,22 @@ export class GameEngine {
     } else if (msg.type === 'shoot') {
       soundManager.playShoot(msg.weapon);
 
-      // Draw bullet tracer
-      this.effects.addTracer(msg.origin, msg.dir);
-
-      // Gun recoil and flash if it was local player
+      // If shooter is local player, originate tracer directly from gun muzzle!
+      let tracerOrigin = msg.origin;
       if (msg.shooterId === this.selfId) {
+        const muzzlePos = this.weaponRenderer.getMuzzleWorldPosition();
+        tracerOrigin = [muzzlePos.x, muzzlePos.y, muzzlePos.z];
         this.weaponRenderer.triggerShootEffect();
       }
+
+      // Draw high-visibility 3D bullet tracer
+      this.effects.addTracer(tracerOrigin, msg.dir, 90, msg.weapon);
     } else if (msg.type === 'hit') {
       if (msg.shooterId === this.selfId) {
         soundManager.playHit(msg.isHeadshot);
         this.effects.showHitmarker(msg.isHeadshot);
+        this.effects.addDamageNumber(msg.position, msg.damage, msg.isHeadshot);
+        this.effects.addImpactSpark(msg.position, msg.isHeadshot ? '#f43f5e' : '#fef08a');
       }
       if (msg.victimId === this.selfId) {
         soundManager.playHurt();

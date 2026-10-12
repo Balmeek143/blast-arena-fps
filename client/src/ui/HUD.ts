@@ -61,6 +61,18 @@ export class HUDManager {
       this.ammoHint.textContent = '⚡ Mystery Power-up Weapon (Reverts when empty)';
     }
 
+    // Weapon card styling based on powerup status
+    const weaponCard = document.getElementById('weapon-status');
+    if (weaponCard) {
+      if (self.weapon !== 'pistol') {
+        weaponCard.style.borderColor = cfg.color;
+        weaponCard.style.boxShadow = `0 16px 40px rgba(0, 0, 0, 0.7), 0 0 25px ${cfg.color}66`;
+      } else {
+        weaponCard.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+        weaponCard.style.boxShadow = '0 16px 40px rgba(0, 0, 0, 0.6)';
+      }
+    }
+
     // Reloading
     this.reloadIndicator.style.display = self.isReloading ? 'block' : 'none';
 
@@ -86,9 +98,9 @@ export class HUDManager {
 
     if (leaderSnapshot && leaderSnapshot.length > 0) {
       const top = leaderSnapshot[0];
-      this.matchLeader.textContent = `1st: ${top.name} (${top.kills} kills)`;
+      this.matchLeader.textContent = `👑 1st: ${top.name} (${top.kills} kills)`;
     } else {
-      this.matchLeader.textContent = 'Match in progress';
+      this.matchLeader.textContent = '👑 Match in progress';
     }
   }
 
